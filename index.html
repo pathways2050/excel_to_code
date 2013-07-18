@@ -68,9 +68,9 @@ bundle
 
 <ol>
 <li>Not tested at all on Windows</li>
-<li>INDIRECT formula must be convertable at runtime into a standard formula</li>
+<li>INDIRECT and OFFSET formula must be convertable at runtime into a standard formula</li>
 <li>Doesn't implement all functions (just the handful of functions with an R or C after their name in <a href="https://github.com/tamc/excel_to_code/blob/master/doc/Which_functions_are_implemented.md">this list</a> )</li>
-<li>Doesn't implement references that involve range unions and lists</li>
+<li>Implements the usual cell and range references but doesn't implement references that involve range unions and lists or references to external worksheets</li>
 <li>Sometimes gives cells as being empty, when excel would give the cell as having a numeric value of zero</li>
 </ol>
       </section>
