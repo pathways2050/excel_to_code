@@ -246,13 +246,27 @@ class ExcelToX
       workbook[:shared_strings] = ExtractSharedStrings.extract(x)
     end
 
-    dump("Shared strings extracted")
+    dump "Shared strings extracted"
   end
   
   # Excel keeps a central list of named references. This includes those
   # that are local to a specific worksheet.
   def extract_named_references
-    extract ExtractNamedReferences, 'workbook.xml', 'Named references'
+    xml('workbook.xml') do |x|
+      workbook[:named_references] = ExtractNamedReferences.extract(x)
+    end
+    dump "named references extracted"
+
+    # Temporary shim
+    o = intermediate("Named references")
+    workbook[:named_references].each do |sheet, names|
+      sheet = "" if sheet == :workbook
+      names.each do |name, ref|
+        o.puts "#{sheet}\t#{name}\t#{ref}"
+      end
+    end
+    close(o)
+
     apply_rewrite RewriteFormulaeToAst, 'Named references'
     replace ReplaceRangesWithArrayLiterals, 'Named references', 'Named references'
   end
@@ -1111,6 +1125,17 @@ class ExcelToX
     if workbook.has_key?(:shared_strings) 
       File.open(File.join(dump_folder, 'Shared strings'), 'w') do |f|
         f.puts workbook[:shared_strings].join("\n")
+      end
+    end
+
+    # Named references
+    if workbook.has_key?(:named_references)
+      File.open(File.join(dump_folder, 'Named references'), 'w') do |f|
+        workbook[:named_references].each do |sheet, names|
+          names.each do |name, reference|
+            f.puts "#{sheet}\t#{name}\t#{reference}"
+          end
+        end
       end
     end
   end
