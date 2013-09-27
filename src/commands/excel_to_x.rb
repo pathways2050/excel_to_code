@@ -98,6 +98,8 @@ class ExcelToX
   #   * false - empty cells and zeros are treated as being different in tests. Numbers must match to full accuracy.
   attr_accessor :sloppy_tests
   
+  attr_accessor :workbook
+
   def set_defaults
     raise ExcelToCodeException.new("No excel file has been specified") unless excel_file
     
@@ -134,6 +136,9 @@ class ExcelToX
 
     # By default, tests allow empty cells and zeros to be treated as equivalent, and numbers only have to match to a 0.001 epsilon (if expected>1) or 0.001 delta (if expected<1)
     self.sloppy_tests ||= true
+
+    # We are now going for an in-memory data structure
+    @workbook = {} 
   end
   
   def go!
@@ -237,7 +242,11 @@ class ExcelToX
   
   # Excel keeps a central file of strings that appear in worksheet cells
   def extract_shared_strings
-    extract ExtractSharedStrings, 'sharedStrings.xml', 'Shared strings'
+    xml('sharedStrings.xml') do |x|
+      workbook[:shared_strings] = ExtractSharedStrings.extract(x)
+    end
+
+    dump("Shared strings extracted")
   end
   
   # Excel keeps a central list of named references. This includes those
@@ -550,10 +559,17 @@ class ExcelToX
     
   def simplify_worksheets
     worksheets do |name,xml_filename|
-      replace ReplaceSharedStrings, [name, 'Values'], 'Shared strings', File.join(name, 'Values')
+      i = input(name, 'Values')
+      o = intermediate(name, 'Values')
+      ReplaceSharedStrings.replace(i, workbook[:shared_strings], o)
+      close(i,o)
       
-      replace SimplifyArithmetic,   [name, 'Formulae'], [name, 'Formulae']      
-      replace ReplaceSharedStrings, [name, 'Formulae'], 'Shared strings', [name, 'Formulae']
+      replace SimplifyArithmetic, [name, 'Formulae'], [name, 'Formulae']      
+
+      i = input(name, 'Formulae')
+      o = intermediate(name, 'Formulae')
+      ReplaceSharedStrings.replace(i, workbook[:shared_strings], o)
+      close(i,o)
       
       r = ReplaceNamedReferences.new
       r.sheet_name = name
@@ -568,6 +584,8 @@ class ExcelToX
       replace ReplaceArraysWithSingleCells, [name, 'Formulae'],  [name, 'Formulae']
       replace WrapFormulaeThatReturnArraysAndAReNotInArrays, [name, 'Formulae'],  [name, 'Formulae']
     end
+    workbook.delete(:shared_strings) # So they can be garbage collected
+    dump("worksheets simplified")
   end
     
   def replace_formulae_with_their_results
@@ -972,14 +990,20 @@ class ExcelToX
     log.info "Finished executing #{klass}.#{method} with #{args.inspect}"
   end
   
-  def xml(*args)
+  def xml(*args, &block)
     args.flatten!
     filename = File.join(xml_directory,'xl',*args)
-    if File.exists?(filename)
+    x = if File.exists?(filename)
       File.open(filename,'r')
     else
       log.warn("#{filename} does not exist in xml(#{args.inspect}), using blank instead")
       StringIO.new
+    end
+    if block
+      yield x
+      close(x)
+    else
+      return x
     end
   end
   
@@ -1075,4 +1099,20 @@ class ExcelToX
     File.expand_path(File.join(args))
   end
   
+  def dump(dump_name = Time.now.to_i.to_s)
+    @counter ||= 0
+    @counter += 1
+    dump_folder = File.join(intermediate_directory, "#{@counter} #{dump_name}")
+
+    # Dump into a file in the intermediate_directory
+    FileUtils.mkdir_p(dump_folder)
+      
+    # Shared strings
+    if workbook.has_key?(:shared_strings) 
+      File.open(File.join(dump_folder, 'Shared strings'), 'w') do |f|
+        f.puts workbook[:shared_strings].join("\n")
+      end
+    end
+  end
+
 end

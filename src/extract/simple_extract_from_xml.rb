@@ -4,8 +4,8 @@ class SimpleExtractFromXML < Nokogiri::XML::SAX::Document
 
     attr_accessor :parsing, :input, :output
   
-    def self.extract(input,output)
-      self.new.extract(input,output)
+    def self.extract(*args)
+      self.new.extract(*args)
     end
 
     def extract(input,output)
